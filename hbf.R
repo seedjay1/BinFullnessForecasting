@@ -1,17 +1,33 @@
 library(ggplot2)
 library(dplyr)
 library(forecast)
+library(RODBC)
 
 library(dplyr)
 library(lubridate)
 
-hbf <- read.csv(file="c:\\HistoricalBinFullnessBRI122.csv")
+#live db connection (office) or data extract file (home)
+#hbf <- read.csv(file="c:\\HistoricalBinFullnessBRI122.csv")
+dbconnection <- odbcDriverConnect("Driver={SQL Server};Server=ssastab01; Database=ml_work;Integrated Security=SSPI")
+hbf <- sqlQuery(dbconnection,paste("
+                                  select dateadd(day, datediff(day, 0, hbf.TransactionTime), 0) TransactionDate
+                                  	, hbf.MachinePlacementId
+                                  	, sum(hbf.DenomVolume) DailyVolume
+                                  from cdjHistoricalBinFullness hbf
+                                  where 1=1
+                                  	--and hbf.MachinePlacementId = 3509
+                                  group by dateadd(day, datediff(day, 0, hbf.TransactionTime), 0)
+                                  	, hbf.MachinePlacementId
+                                  order by hbf.MachinePlacementId
+                                  	, dateadd(day, datediff(day, 0, hbf.TransactionTime), 0)
+                                   ;"))
+
 
 # make good date col
 hbf$TransactionDate <- mdy(hbf$TransactionDate)
 
 # set mpid for modeling
-mpid <- 30198
+mpid <- 13643
 
 #filter & sort for specific mpid
 hbf_fil <- subset(hbf, MachinePlacementId == mpid) #3509 is the canonical example
@@ -45,24 +61,24 @@ plot(fc2, sub=paste("mpid ", mpid))
 #plot(fc3)
 
 #let's try a fourier way
-hbf_ts <- ts(hbf_perfect, 365.25)
-hbf_ts <- msts(hbf_perfect$DailyVolume,seasonal.periods=c(365.25),start=c(2016,1,1))
-fit4 <- Arima(hbf_ts, order=c(10,0,6), xreg=fourier(hbf_ts, K=c(4)))
-fc4 <- forecast(fit4, xreg=fourier(hbf_ts, K=c(4), h=365))
-plot(fc4, sub=paste("mpid ", mpid))
+#hbf_ts <- ts(hbf_perfect, 365.25)
+#hbf_ts <- msts(hbf_perfect$DailyVolume,seasonal.periods=c(365.25),start=c(2016,1,1))
+#fit4 <- Arima(hbf_ts, order=c(10,0,6), xreg=fourier(hbf_ts, K=c(4)))
+#fc4 <- forecast(fit4, xreg=fourier(hbf_ts, K=c(4), h=365))
+#plot(fc4, sub=paste("mpid ", mpid))
 
 #let's try an AIC minimization model selection
-hbf_ts <- ts(hbf_perfect, freq = 365.25/7, start=c(2016,1,1))
-bestfit <- list(aicc=Inf)
-for(i in 1:25)
-{
-  fit <- auto.arima(hbf_ts, xreg=fourier(hbf_ts, K=i), seasonal=FALSE)
-  if(fit$aicc < bestfit$aicc)
-    bestfit <- fit
-  else break;
-}
-fc5 <- forecast(bestfit, xreg=fourier(hbf_ts, K=12))
-plot(fc5)
+#hbf_ts <- ts(hbf_perfect, freq = 365.25/7, start=c(2016,1,1))
+#bestfit <- list(aicc=Inf)
+#for(i in 1:25)
+#{
+#  fit <- auto.arima(hbf_ts, xreg=fourier(hbf_ts, K=i), seasonal=FALSE)
+#  if(fit$aicc < bestfit$aicc)
+#    bestfit <- fit
+#  else break;
+#}
+#fc5 <- forecast(bestfit, xreg=fourier(hbf_ts, K=12))
+#plot(fc5)
 
 
 
